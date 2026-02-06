@@ -1,0 +1,20 @@
+# FLUX.2 Klein Realtime - Python Dependencies
+# Note: These are installed inside the Modal container image (see app.py).
+# This file is for local reference / development only.
+
+modal>=0.73.0
+torch==2.6.0
+torchvision==0.21.0
+safetensors>=0.4.0
+transformers>=4.51.0
+accelerate>=0.33.0
+sentencepiece>=0.1.91
+diffusers @ git+https://github.com/huggingface/diffusers.git
+opencv-python>=4.8.0
+pillow>=10.0.0
+numpy<2
+fastapi>=0.112.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+pydantic>=2.8.0
+huggingface-hub>=0.34.0
