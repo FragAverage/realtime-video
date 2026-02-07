@@ -103,7 +103,7 @@ def download_weights():
 # ---------------------------------------------------------------------------
 
 @app.cls(
-    gpu="H100",
+    gpu="L40S",
     memory=65536,
     timeout=3600,
     scaledown_window=120,
@@ -161,18 +161,23 @@ class Flux2KleinServer:
         # Pre-encode default prompt
         self._encode_prompt()
 
+        # Compile transformer for faster inference (20-40% speedup after warmup)
+        print("[startup] Compiling transformer with torch.compile...")
+        pipe.transformer = torch.compile(pipe.transformer, mode="reduce-overhead")
+        print("[startup] torch.compile applied.")
+
         # Warmup: run inference passes to trigger torch.compile + CUDA graphs
         print("[startup] Warming up pipeline (triggers torch.compile)...")
         from PIL import Image
-        warmup_img = Image.new("RGB", (512, 512), (128, 128, 128))
+        warmup_img = Image.new("RGB", (384, 384), (128, 128, 128))
         for i in range(3):
             self.pipe(
                 prompt_embeds=self.prompt_embeds,
                 image=[warmup_img],
                 num_inference_steps=4,
                 guidance_scale=1.0,
-                height=512,
-                width=512,
+                height=384,
+                width=384,
                 output_type="pil",
             )
             print(f"[startup] Warmup {i+1}/3 complete")
@@ -220,8 +225,8 @@ class Flux2KleinServer:
             image=[image],
             num_inference_steps=self.current_steps,
             guidance_scale=self.current_guidance,
-            height=512,
-            width=512,
+            height=384,
+            width=384,
             generator=generator,
             output_type="pil",
             max_sequence_length=256,
@@ -362,8 +367,8 @@ class Flux2KleinServer:
                             try:
                                 input_image = Image.open(io.BytesIO(raw)).convert("RGB")
                                 # Resize if needed (client sends 512x512)
-                                if input_image.size != (512, 512):
-                                    input_image = input_image.resize((512, 512), Image.LANCZOS)
+                                if input_image.size != (384, 384):
+                                    input_image = input_image.resize((384, 384), Image.LANCZOS)
                                 latest_frame[0] = input_image
                                 frame_ready.set()
                             except Exception as e:

@@ -114,7 +114,7 @@ export function useWebcam(): UseWebcamReturn {
     (
       targetWidth: number,
       targetHeight: number,
-      quality = 0.7
+      quality = 0.92
     ): string | null => {
       if (!videoRef.current || !canvasRef.current || !isActive) return null;
 

@@ -14,8 +14,8 @@ import type { StyleParams } from "@/lib/types";
 import { DEFAULT_PARAMS } from "@/lib/types";
 
 const CAPTURE_FPS = 15;
-const CAPTURE_WIDTH = 512;
-const CAPTURE_HEIGHT = 512;
+const CAPTURE_WIDTH = 384;
+const CAPTURE_HEIGHT = 384;
 
 export default function Home() {
   // ── State ──────────────────────────────────────────────────────
@@ -157,7 +157,7 @@ export default function Home() {
 
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-neon-green)] pulse-glow" />
             <span className="text-[11px] mono text-[var(--color-text-muted)]">
-              Modal H100
+              Modal L40S
             </span>
           </div>
         </header>
