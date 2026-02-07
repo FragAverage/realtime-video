@@ -17,10 +17,7 @@ interface VideoCanvasProps {
 
 /**
  * High-performance canvas renderer for streaming video frames.
- *
- * Uses createImageBitmap for off-main-thread JPEG decoding,
- * and requestAnimationFrame with interval throttling for smooth playback.
- * Includes a real-time FPS meter.
+ * Clean design without scanlines or overlays.
  */
 export function VideoCanvas({
   frameBuffer,
@@ -110,28 +107,27 @@ export function VideoCanvas({
   }, [isPlaying, drawFrame]);
 
   return (
-    <div className="relative">
+    <div className="relative w-full h-full">
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        className="w-full h-auto block rounded-xl bg-black"
+        className="w-full h-full object-cover block bg-zinc-900"
       />
 
-      {/* FPS overlay */}
-      <div className="absolute top-3 right-3 flex gap-2">
-        <span className="mono text-[11px] px-2 py-1 rounded-md bg-black/60 text-[var(--color-neon-green)]">
-          {currentFps.toFixed(1)} FPS
-        </span>
-        {bufferSize > 0 && (
-          <span className="mono text-[11px] px-2 py-1 rounded-md bg-black/60 text-[var(--color-text-muted)]">
-            BUF {bufferSize}
+      {/* FPS overlay - minimal */}
+      {isPlaying && (
+        <div className="absolute top-3 right-3 flex gap-1.5">
+          <span className="mono text-[10px] px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white/70">
+            {currentFps.toFixed(1)} fps
           </span>
-        )}
-      </div>
-
-      {/* Scanline overlay */}
-      <div className="scanlines absolute inset-0 rounded-xl pointer-events-none" />
+          {bufferSize > 0 && (
+            <span className="mono text-[10px] px-2 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white/50">
+              buf {bufferSize}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

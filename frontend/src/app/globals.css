@@ -4,25 +4,26 @@
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains);
 
-  --color-bg: #0b1120;
-  --color-surface: rgba(15, 23, 42, 0.82);
-  --color-surface-soft: rgba(17, 24, 39, 0.72);
-  --color-border: rgba(148, 163, 184, 0.16);
-  --color-border-bright: rgba(148, 163, 184, 0.26);
-  --color-text-primary: #e2e8f0;
-  --color-text-muted: rgba(148, 163, 184, 0.78);
-  --color-accent: #38bdf8;
-  --color-accent-strong: #2563eb;
+  --color-bg: #0a0a0a;
+  --color-surface: rgba(24, 24, 27, 0.9);
+  --color-surface-soft: rgba(24, 24, 27, 0.6);
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-bright: rgba(255, 255, 255, 0.16);
+  --color-text-primary: #fafafa;
+  --color-text-secondary: #a1a1aa;
+  --color-text-muted: rgba(161, 161, 170, 0.78);
+  --color-accent: #ffffff;
+  --color-accent-strong: #e4e4e7;
   --color-neon-cyan: #22d3ee;
   --color-neon-pink: #f472b6;
   --color-neon-green: #4ade80;
-  --color-danger: #f87171;
+  --color-danger: #ef4444;
 }
 
 :root {
   color-scheme: dark;
-  --background: #0b1120;
-  --foreground: #e2e8f0;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
 }
 
 * {
@@ -39,56 +40,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Cyberpunk scanline overlay effect */
-.scanlines::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
-  );
-  z-index: 10;
-}
-
-/* Neon glow effect for borders and elements */
-.glow-cyan {
-  box-shadow:
-    0 0 5px rgba(56, 189, 248, 0.15),
-    0 0 20px rgba(56, 189, 248, 0.05);
-}
-
-.glow-cyan-strong {
-  box-shadow:
-    0 0 5px rgba(56, 189, 248, 0.3),
-    0 0 20px rgba(56, 189, 248, 0.1),
-    0 0 40px rgba(56, 189, 248, 0.05);
-}
-
-/* Glass panel effect */
-.glass {
-  background: rgba(15, 23, 42, 0.82);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-/* Terminal-style cursor blink */
-@keyframes blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-.cursor-blink::after {
-  content: "_";
-  animation: blink 1s step-end infinite;
-  color: var(--color-accent);
-}
-
 /* Subtle pulse for active indicators */
 @keyframes pulse-glow {
   0%, 100% { opacity: 0.6; }
@@ -99,7 +50,7 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Custom scrollbar for the terminal aesthetic */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -110,41 +61,48 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(255, 255, 255, 0.1);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Range input styling */
 input[type="range"] {
   appearance: none;
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(56, 189, 248, 0.5), rgba(37, 99, 235, 0.5));
+  background: rgba(255, 255, 255, 0.12);
   cursor: pointer;
 }
 
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: #ffffff;
-  border: 2px solid rgba(56, 189, 248, 0.7);
-  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: none;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
+  transform: scale(1.15);
 }
 
 /* Mono code style for status readouts */
 .mono {
   font-family: var(--font-jetbrains), "JetBrains Mono", "Fira Code", monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* Glass panel effect - modernized */
+.glass {
+  background: rgba(24, 24, 27, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }

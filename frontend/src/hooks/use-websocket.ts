@@ -153,6 +153,7 @@ export function useWebSocket(): UseWebSocketReturn {
               guidance_scale: params.guidance_scale,
               strength: params.strength,
               num_inference_steps: params.num_inference_steps,
+              lora_id: params.lora_id ?? null,
             }));
             console.log("[ws] Config sent");
           }

@@ -13,9 +13,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Krea Realtime 14B - Real-Time AI Video Generation",
+  title: "FLUX.2 Klein Realtime - Webcam Stylization",
   description:
-    "Real-time autoregressive video generation powered by Krea Realtime 14B, distilled from Wan 2.1 14B via Self-Forcing.",
+    "Real-time webcam stylization powered by FLUX.2 Klein 4B.",
 };
 
 export default function RootLayout({

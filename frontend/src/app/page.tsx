@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Zap, Square, Camera, CameraOff } from "lucide-react";
+import { Zap, Square, Camera, Settings2 } from "lucide-react";
 
 import { VideoCanvas } from "@/components/video-canvas";
 import { PromptBar } from "@/components/prompt-bar";
@@ -21,6 +21,7 @@ export default function Home() {
   // ── State ──────────────────────────────────────────────────────
   const [params, setParams] = useState<StyleParams>({ ...DEFAULT_PARAMS });
   const [playbackFps, setPlaybackFps] = useState(15);
+  const [showControls, setShowControls] = useState(false);
 
   // ── Hooks ──────────────────────────────────────────────────────
   const ws = useWebSocket();
@@ -30,6 +31,7 @@ export default function Home() {
   const webcamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isStreaming = ws.status === "streaming";
+  const isConnecting = ws.status === "connecting" || ws.status === "ready";
 
   // ── Param updater ──────────────────────────────────────────────
   const updateParams = useCallback((partial: Partial<StyleParams>) => {
@@ -43,7 +45,6 @@ export default function Home() {
     // Start webcam first and wait for it to be ready
     if (!webcam.isActive) {
       await webcam.start(CAPTURE_WIDTH, CAPTURE_HEIGHT);
-      // Small delay to ensure the video element is mounted and stream attached
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
@@ -61,7 +62,6 @@ export default function Home() {
   }, [ws]);
 
   // ── Webcam frame capture loop ──────────────────────────────────
-  // When streaming, capture webcam frames and send to server
   useEffect(() => {
     if (isStreaming && webcam.isActive) {
       const interval = 1000 / CAPTURE_FPS;
@@ -69,7 +69,6 @@ export default function Home() {
       webcamIntervalRef.current = setInterval(() => {
         const frame = webcam.captureFrame(CAPTURE_WIDTH, CAPTURE_HEIGHT);
         if (frame) {
-          // Convert base64 to binary and send
           const binary = Uint8Array.from(atob(frame), (c) => c.charCodeAt(0));
           ws.sendFrame(binary.buffer);
         }
@@ -86,12 +85,11 @@ export default function Home() {
 
   // ── Style preset selection ─────────────────────────────────────
   const handlePresetSelect = useCallback(
-    (prompt: string) => {
-      updateParams({ prompt });
+    (prompt: string, loraId: string | null) => {
+      updateParams({ prompt, lora_id: loraId });
 
-      // If already streaming, update prompt on server
       if (isStreaming) {
-        ws.sendConfig({ prompt });
+        ws.sendConfig({ prompt, lora_id: loraId });
       }
     },
     [isStreaming, ws, updateParams]
@@ -100,9 +98,9 @@ export default function Home() {
   // ── Mid-stream prompt apply ────────────────────────────────────
   const handlePromptApply = useCallback(
     (prompt: string) => {
-      ws.sendConfig({ prompt });
+      ws.sendConfig({ prompt, lora_id: params.lora_id });
     },
-    [ws]
+    [ws, params.lora_id]
   );
 
   // ── Helpers ────────────────────────────────────────────────────
@@ -110,106 +108,54 @@ export default function Home() {
 
   // ── Render ─────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen flex items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-[1100px] flex flex-col gap-5">
-        {/* ── Header ──────────────────────────────────────────── */}
-        <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-[var(--color-text-primary)]">
-              FLUX.2 Klein{" "}
-              <span className="text-[var(--color-accent)]">Realtime</span>
-            </h1>
-            <p className="text-[12px] text-[var(--color-text-muted)] mt-0.5 mono">
-              FLUX.2 Klein 4B Real-Time Webcam Stylization
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Webcam toggle */}
-            <button
-              onClick={() =>
-                webcam.isActive
-                  ? webcam.stop()
-                  : webcam.start(CAPTURE_WIDTH, CAPTURE_HEIGHT)
-              }
-              disabled={isStreaming}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] font-medium
-                cursor-pointer transition-all duration-200 border
-                ${
-                  webcam.isActive
-                    ? "bg-[var(--color-neon-green)]/10 border-[var(--color-neon-green)]/30 text-[var(--color-neon-green)]"
-                    : "bg-[var(--color-surface-soft)] border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-[var(--color-border-bright)]"
-                }
-                disabled:opacity-50 disabled:cursor-not-allowed
-              `}
-            >
-              {webcam.isActive ? (
-                <>
-                  <CameraOff className="w-3.5 h-3.5" />
-                  Webcam On
-                </>
-              ) : (
-                <>
-                  <Camera className="w-3.5 h-3.5" />
-                  Enable Webcam
-                </>
-              )}
-            </button>
-
-            <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-neon-green)] pulse-glow" />
-            <span className="text-[11px] mono text-[var(--color-text-muted)]">
-              Modal L40S
-            </span>
-          </div>
-        </header>
-
-        {/* ── Video Display Area ──────────────────────────────── */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <main className="h-screen flex flex-col overflow-hidden bg-[var(--color-bg)]">
+      {/* ── Video Area (fills available space) ──────────────────── */}
+      <div className="flex-1 flex items-center justify-center p-4 pb-0 min-h-0">
+        <div className="flex gap-1 h-full max-h-[calc(100vh-220px)] w-full max-w-5xl">
           {/* Webcam input */}
-          <div className="glass rounded-2xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] text-[var(--color-text-muted)] font-semibold uppercase tracking-wider">
-                Webcam Input
-              </span>
-              {webcam.isActive && (
-                <span className="flex items-center gap-1.5 text-[11px] text-[var(--color-neon-green)]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-neon-green)] pulse-glow" />
-                  Live
-                </span>
-              )}
-            </div>
+          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900">
             {webcam.isActive ? (
               <video
                 ref={webcam.videoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full aspect-square object-cover block rounded-xl bg-black"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full aspect-square rounded-xl bg-black/50 flex flex-col items-center justify-center gap-3">
-                <Camera className="w-8 h-8 text-[var(--color-text-muted)]/30" />
-                <p className="text-[13px] text-[var(--color-text-muted)] text-center px-4">
-                  Click{" "}
-                  <span className="font-semibold text-[var(--color-accent)]">
-                    Enable Webcam
-                  </span>{" "}
-                  to start your camera
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3">
+                <Camera className="w-10 h-10 text-zinc-600" />
+                <p className="text-sm text-zinc-500 text-center px-4">
+                  Camera will activate when you start streaming
                 </p>
               </div>
             )}
+            {/* Webcam label */}
+            <div className="absolute top-3 left-3">
+              <span className="text-[11px] font-medium text-white/60 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                Webcam
+              </span>
+            </div>
+            {webcam.isActive && (
+              <div className="absolute top-3 right-3">
+                <span className="flex items-center gap-1.5 text-[11px] text-white/80 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 pulse-glow" />
+                  Live
+                </span>
+              </div>
+            )}
             {webcam.error && (
-              <p className="text-[12px] text-[var(--color-danger)] mt-2">
-                {webcam.error}
-              </p>
+              <div className="absolute bottom-3 left-3 right-3">
+                <p className="text-[12px] text-red-400 bg-black/60 backdrop-blur-sm px-3 py-2 rounded-lg">
+                  {webcam.error}
+                </p>
+              </div>
             )}
           </div>
 
           {/* Styled output */}
-          <div className="glass rounded-2xl p-4">
-            <div className="text-[11px] text-[var(--color-text-muted)] font-semibold mb-2 uppercase tracking-wider">
-              Styled Output
-            </div>
-            <div className="aspect-square">
+          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900">
+            <div className="w-full h-full">
               <VideoCanvas
                 frameBuffer={ws.frameBuffer}
                 playbackFps={playbackFps}
@@ -218,10 +164,18 @@ export default function Home() {
                 height={CAPTURE_HEIGHT}
               />
             </div>
+            {/* Output label */}
+            <div className="absolute top-3 left-3">
+              <span className="text-[11px] font-medium text-white/60 bg-black/40 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                Output
+              </span>
+            </div>
           </div>
-        </section>
+        </div>
+      </div>
 
-        {/* ── Status Bar ──────────────────────────────────────── */}
+      {/* ── Status indicator (between video and controls) ───────── */}
+      <div className="flex justify-center py-2">
         <StatusBar
           connectionStatus={ws.status}
           frameCount={ws.frameCount}
@@ -229,100 +183,76 @@ export default function Home() {
           onPlaybackFpsChange={setPlaybackFps}
           error={ws.error}
         />
+      </div>
 
-        {/* ── Style Gallery ───────────────────────────────────── */}
-        <div>
-          <p className="text-[12px] text-[var(--color-text-muted)] mb-2">
-            Pick a style or write your own prompt below
-          </p>
+      {/* ── Bottom Controls Dock ────────────────────────────────── */}
+      <div className="shrink-0 px-4 pb-4">
+        <div className="max-w-3xl mx-auto flex flex-col gap-3">
+          {/* Prompt input + action button */}
+          <div className="relative">
+            <PromptBar
+              prompt={params.prompt}
+              onPromptChange={(prompt) => updateParams({ prompt })}
+              onApply={handlePromptApply}
+              canApply={isStreaming}
+              onSubmit={handleStart}
+              disabled={false}
+            />
+            {/* Action button inside the prompt bar area */}
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+              {/* Settings toggle */}
+              <button
+                onClick={() => setShowControls(!showControls)}
+                className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                  showControls
+                    ? "bg-white/10 text-white"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                }`}
+                title="Parameters"
+              >
+                <Settings2 className="w-4 h-4" />
+              </button>
+
+              {/* Start / Stop button */}
+              {isStreaming || isConnecting ? (
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
+                    cursor-pointer bg-red-500/90 hover:bg-red-500 text-white transition-all"
+                >
+                  <Square className="w-3.5 h-3.5" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  onClick={handleStart}
+                  disabled={!hasPrompt}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
+                    cursor-pointer disabled:cursor-not-allowed disabled:opacity-30
+                    bg-white text-black hover:bg-zinc-200 transition-all"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  Start
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Style presets row */}
           <StyleGallery
             onSelect={handlePresetSelect}
             activePrompt={params.prompt}
           />
-        </div>
 
-        {/* ── Prompt Bar ──────────────────────────────────────── */}
-        <PromptBar
-          prompt={params.prompt}
-          onPromptChange={(prompt) => updateParams({ prompt })}
-          onApply={handlePromptApply}
-          canApply={isStreaming}
-        />
-
-        {/* ── Action Buttons ──────────────────────────────────── */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={handleStart}
-            disabled={isStreaming || !hasPrompt}
-            className="flex items-center gap-2 px-6 py-3 rounded-xl text-[14px] font-bold
-              cursor-pointer disabled:cursor-not-allowed disabled:opacity-40
-              bg-gradient-to-r from-[var(--color-accent)] to-[var(--color-accent-strong)]
-              text-[#0b1120] transition-all duration-200
-              hover:not-disabled:shadow-[0_12px_28px_rgba(37,99,235,0.3)]
-              hover:not-disabled:-translate-y-0.5"
-          >
-            <Zap className="w-4 h-4" />
-            Start Streaming
-          </button>
-
-          <button
-            onClick={handleStop}
-            disabled={!isStreaming}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl text-[14px] font-semibold
-              cursor-pointer disabled:cursor-not-allowed disabled:opacity-40
-              bg-[var(--color-surface-soft)] border border-[var(--color-border-bright)]
-              text-[var(--color-text-primary)] transition-all duration-200
-              hover:not-disabled:shadow-lg hover:not-disabled:-translate-y-0.5"
-          >
-            <Square className="w-4 h-4" />
-            Stop
-          </button>
-
-          {/* Hint when no prompt */}
-          {!hasPrompt && !isStreaming && (
-            <span className="text-[12px] text-[var(--color-text-muted)] italic">
-              Select a style preset or enter a prompt to start
-            </span>
+          {/* Collapsible advanced controls */}
+          {showControls && (
+            <Controls
+              params={params}
+              onParamsChange={updateParams}
+              disabled={isStreaming}
+            />
           )}
         </div>
-
-        {/* ── Advanced Controls ────────────────────────────────── */}
-        <Controls
-          params={params}
-          onParamsChange={updateParams}
-          disabled={isStreaming}
-        />
-
-        {/* ── Footer ──────────────────────────────────────────── */}
-        <footer className="text-center text-[11px] text-[var(--color-text-muted)]/50 pt-4">
-          Powered by{" "}
-          <a
-            href="https://huggingface.co/black-forest-labs/FLUX.2-klein-4B"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--color-accent)]/60 hover:text-[var(--color-accent)]"
-          >
-            FLUX.2 Klein 4B
-          </a>{" "}
-          &middot;{" "}
-          <a
-            href="https://blackforestlabs.ai"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--color-accent)]/60 hover:text-[var(--color-accent)]"
-          >
-            Black Forest Labs
-          </a>{" "}
-          &middot; Deployed on{" "}
-          <a
-            href="https://modal.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[var(--color-accent)]/60 hover:text-[var(--color-accent)]"
-          >
-            Modal
-          </a>
-        </footer>
       </div>
     </main>
   );

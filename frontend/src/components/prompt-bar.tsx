@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Send } from "lucide-react";
 
 interface PromptBarProps {
   /** Current prompt text */
@@ -12,19 +11,21 @@ interface PromptBarProps {
   onApply: (prompt: string) => void;
   /** Whether there's an active stream to apply to */
   canApply: boolean;
+  /** Called when Enter is pressed (to start streaming) */
+  onSubmit?: () => void;
   /** Whether the prompt input is disabled */
   disabled?: boolean;
 }
 
 /**
- * Prompt input bar with "Apply" button for mid-stream prompt updates.
- * Press Cmd+Enter to apply while streaming.
+ * Clean prompt input bar. Press Enter to start, Cmd+Enter to apply mid-stream.
  */
 export function PromptBar({
   prompt,
   onPromptChange,
   onApply,
   canApply,
+  onSubmit,
   disabled = false,
 }: PromptBarProps) {
   const [isFocused, setIsFocused] = useState(false);
@@ -37,58 +38,41 @@ export function PromptBar({
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // Cmd/Ctrl+Enter to apply mid-stream
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canApply) {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleApply();
+        if (canApply) {
+          // Mid-stream: apply new prompt
+          handleApply();
+        } else if (onSubmit) {
+          // Not streaming: start
+          onSubmit();
+        }
       }
     },
-    [canApply, handleApply]
+    [canApply, handleApply, onSubmit]
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      {/* Prompt textarea */}
-      <div
-        className={`glass rounded-xl transition-all duration-200 ${
-          isFocused ? "glow-cyan-strong border-[var(--color-accent)]/60" : ""
-        }`}
-      >
-        <textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          onKeyDown={handleKeyDown}
-          placeholder="Describe the style you want applied to your webcam feed..."
-          disabled={disabled}
-          rows={2}
-          className="w-full bg-transparent px-4 py-3 text-[15px] leading-relaxed
-            text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)]/50
-            resize-none outline-none disabled:opacity-50"
-        />
-      </div>
-
-      {/* Apply button (visible when streaming) */}
-      {canApply && (
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleApply}
-            disabled={!prompt.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[14px] font-semibold
-              transition-all duration-200 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40
-              bg-[var(--color-accent-strong)] text-white
-              hover:not-disabled:shadow-[0_8px_24px_rgba(37,99,235,0.3)]
-              hover:not-disabled:-translate-y-0.5"
-          >
-            <Send className="w-4 h-4" />
-            <span>Apply Style</span>
-          </button>
-          <span className="text-[11px] text-[var(--color-text-muted)]">
-            {"\u2318"}+Enter
-          </span>
-        </div>
-      )}
+    <div
+      className={`rounded-2xl border transition-all duration-200 ${
+        isFocused
+          ? "border-zinc-600 bg-zinc-900"
+          : "border-zinc-800 bg-zinc-900/80"
+      }`}
+    >
+      <textarea
+        value={prompt}
+        onChange={(e) => onPromptChange(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        onKeyDown={handleKeyDown}
+        placeholder="Describe the style you want..."
+        disabled={disabled}
+        rows={1}
+        className="w-full bg-transparent pl-4 pr-36 py-3 text-[14px] leading-relaxed
+          text-white placeholder:text-zinc-600
+          resize-none outline-none disabled:opacity-50"
+      />
     </div>
   );
 }

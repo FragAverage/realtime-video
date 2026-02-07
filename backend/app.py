@@ -19,7 +19,14 @@ import os
 # ---------------------------------------------------------------------------
 
 MODELS_DIR = "/models"
+LORAS_DIR = "/models/loras"
 MODEL_REPO = "black-forest-labs/FLUX.2-klein-4B"
+
+# Available LoRA adapters (id -> HuggingFace repo)
+LORA_REPOS = {
+    "anime-style": "Sawata97/flux2_4b_koni_animestyle",
+    "pixel-art": "Limbicnation/pixel-art-lora",
+}
 
 # Persistent volume for caching model weights
 volume = modal.Volume.from_name("flux2-klein-weights", create_if_missing=True)
@@ -40,6 +47,7 @@ image = (
         # Transformers 4.51+ (needed for Qwen3ForCausalLM)
         "transformers>=4.51.0",
         "accelerate>=0.33.0",
+        "peft>=0.15.0",
         "safetensors>=0.4.0",
         "sentencepiece>=0.1.91",
         # FP8 quantization
@@ -72,9 +80,10 @@ app = modal.App("flux2-klein-realtime", image=image)
 # ---------------------------------------------------------------------------
 
 def download_weights():
-    """Download FLUX.2 Klein 4B weights if not cached."""
+    """Download FLUX.2 Klein 4B weights and LoRA adapters if not cached."""
     from huggingface_hub import snapshot_download
 
+    # --- Base model ---
     model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b")
     marker = os.path.join(model_dir, "model_index.json")
     if not os.path.exists(marker):
@@ -95,6 +104,22 @@ def download_weights():
     else:
         print("[weights] FLUX.2 Klein 4B already cached.")
 
+    # --- LoRA adapters ---
+    os.makedirs(LORAS_DIR, exist_ok=True)
+    for lora_id, repo in LORA_REPOS.items():
+        lora_dir = os.path.join(LORAS_DIR, lora_id)
+        if not os.path.exists(lora_dir) or not os.listdir(lora_dir):
+            print(f"[weights] Downloading LoRA '{lora_id}' from {repo}...")
+            snapshot_download(
+                repo,
+                local_dir=lora_dir,
+                local_dir_use_symlinks=False,
+                ignore_patterns=["*.md", ".gitattributes"],
+            )
+            print(f"[weights] LoRA '{lora_id}' downloaded.")
+        else:
+            print(f"[weights] LoRA '{lora_id}' already cached.")
+
     volume.commit()
 
 
@@ -107,7 +132,7 @@ def download_weights():
     memory=65536,
     timeout=3600,
     scaledown_window=120,
-    min_containers=1,
+    min_containers=0,
     volumes={MODELS_DIR: volume},
 )
 @modal.concurrent(max_inputs=10)
@@ -158,15 +183,27 @@ class Flux2KleinServer:
         self.current_guidance = 1.0
         self.current_seed = 42
 
+        # LoRA state
+        self.current_lora = None  # Currently loaded LoRA id (None = base model)
+        self.available_loras = {}
+        for lora_id in LORA_REPOS:
+            lora_dir = os.path.join(LORAS_DIR, lora_id)
+            if os.path.exists(lora_dir):
+                self.available_loras[lora_id] = lora_dir
+        print(f"[startup] Available LoRAs: {list(self.available_loras.keys())}")
+
         # Pre-encode default prompt
         self._encode_prompt()
 
-        # Compile transformer for faster inference (20-40% speedup after warmup)
+        # ── torch.compile ──────────────────────────────────────────
+        # Using mode="default" to avoid CUDA graph TLS issues in ThreadPoolExecutor.
+        # LoRA fuse/unfuse will require torch._dynamo.reset() after each swap,
+        # which triggers a one-time retrace (~10-30s) on the next inference call.
         print("[startup] Compiling transformer with torch.compile...")
-        pipe.transformer = torch.compile(pipe.transformer, mode="reduce-overhead")
+        pipe.transformer = torch.compile(pipe.transformer, mode="default")
         print("[startup] torch.compile applied.")
 
-        # Warmup: run inference passes to trigger torch.compile + CUDA graphs
+        # Warmup: run inference passes to trigger torch.compile tracing
         print("[startup] Warming up pipeline (triggers torch.compile)...")
         from PIL import Image
         warmup_img = Image.new("RGB", (384, 384), (128, 128, 128))
@@ -194,15 +231,62 @@ class Flux2KleinServer:
                 max_sequence_length=256,
             )
 
+    def load_lora(self, lora_id: str | None):
+        """Load, swap, or unload a LoRA adapter.
+
+        Uses fuse_lora() to merge LoRA weights into the base model for
+        zero per-frame overhead. After fuse/unfuse, resets the torch.compile
+        cache so the next inference call retraces (one-time ~10-30s cost).
+
+        - lora_id=None: unload current LoRA, revert to base model
+        - lora_id=<id>: load and fuse the specified LoRA
+        - Same as current: no-op
+        """
+        import torch
+
+        if lora_id == self.current_lora:
+            return  # Already loaded (or both None)
+
+        # Unload current LoRA if one is active
+        if self.current_lora is not None:
+            print(f"[lora] Unloading '{self.current_lora}'...")
+            try:
+                self.pipe.unfuse_lora()
+                self.pipe.unload_lora_weights()
+            except Exception as e:
+                print(f"[lora] Warning during unload: {e}")
+            self.current_lora = None
+            print("[lora] Reverted to base model.")
+
+        # Load new LoRA if requested
+        if lora_id is not None:
+            if lora_id not in self.available_loras:
+                print(f"[lora] WARNING: '{lora_id}' not found, ignoring.")
+                return
+
+            lora_dir = self.available_loras[lora_id]
+            print(f"[lora] Loading '{lora_id}' from {lora_dir}...")
+            self.pipe.load_lora_weights(lora_dir)
+            self.pipe.fuse_lora()
+            self.current_lora = lora_id
+            print(f"[lora] '{lora_id}' loaded and fused.")
+
+        # Reset torch.compile cache -- the fused/unfused weights changed
+        # the model parameters, so the compiled graph is stale.
+        # Next inference call will retrace once, then run fast again.
+        torch._dynamo.reset()
+        print("[lora] Compile cache reset. Next frame will retrace.")
+
     def update_params(
         self,
         prompt: str = "",
         guidance_scale: float = 1.0,
         num_inference_steps: int = 4,
         seed: int = 42,
+        lora_id: str | None = None,
         **kwargs,
     ):
-        """Update parameters. Re-encodes prompt if it changed."""
+        """Update parameters. Re-encodes prompt if it changed. Swaps LoRA if needed."""
         prompt_changed = prompt and prompt != self.current_prompt
 
         if prompt:
@@ -210,6 +294,9 @@ class Flux2KleinServer:
         self.current_guidance = max(0.0, min(10.0, guidance_scale))
         self.current_steps = max(1, min(8, num_inference_steps))
         self.current_seed = int(seed)
+
+        # Swap LoRA if the requested one differs from current
+        self.load_lora(lora_id)
 
         if prompt_changed:
             self._encode_prompt()
@@ -319,6 +406,11 @@ class Flux2KleinServer:
                     while not should_stop[0]:
                         message = await websocket.receive()
 
+                        # Handle disconnect
+                        if message.get("type") == "websocket.disconnect":
+                            log.info("Client sent disconnect")
+                            break
+
                         # Handle text messages (JSON config/updates)
                         if message.get("text") is not None:
                             try:
@@ -331,6 +423,7 @@ class Flux2KleinServer:
                             guidance_scale = float(data.get("guidance_scale", 1.0))
                             num_inference_steps = int(data.get("num_inference_steps", 4))
                             seed = data.get("seed", 42)
+                            lora_id = data.get("lora_id", None)
 
                             if prompt:
                                 try:
@@ -341,9 +434,10 @@ class Flux2KleinServer:
                                             guidance_scale=guidance_scale,
                                             num_inference_steps=num_inference_steps,
                                             seed=int(seed),
+                                            lora_id=lora_id,
                                         ),
                                     )
-                                    log.info(f"Params updated: {prompt[:60]}... steps={num_inference_steps}")
+                                    log.info(f"Params updated: {prompt[:60]}... steps={num_inference_steps} lora={lora_id}")
                                 except Exception as e:
                                     log.error(f"Param update failed: {e}")
                                     traceback.print_exc()

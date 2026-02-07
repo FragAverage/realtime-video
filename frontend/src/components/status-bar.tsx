@@ -19,21 +19,21 @@ const STATUS_CONFIG: Record<
   ConnectionStatus,
   { label: string; dotClass: string }
 > = {
-  disconnected: { label: "Disconnected", dotClass: "bg-gray-500" },
+  disconnected: { label: "Ready", dotClass: "bg-zinc-500" },
   connecting: {
-    label: "Connecting... (GPU cold start can take 1-2 min)",
+    label: "Connecting... GPU cold start ~1-2 min",
     dotClass: "bg-yellow-400 pulse-glow",
   },
   ready: { label: "Configuring...", dotClass: "bg-blue-400" },
   streaming: {
     label: "Streaming",
-    dotClass: "bg-[var(--color-neon-green)] pulse-glow",
+    dotClass: "bg-green-400 pulse-glow",
   },
-  error: { label: "Error", dotClass: "bg-[var(--color-danger)]" },
+  error: { label: "Error", dotClass: "bg-red-500" },
 };
 
 /**
- * Status bar showing connection state, frame count, and playback FPS.
+ * Minimal inline status indicator.
  */
 export function StatusBar({
   connectionStatus,
@@ -45,44 +45,41 @@ export function StatusBar({
   const { label, dotClass } = STATUS_CONFIG[connectionStatus];
 
   return (
-    <div
-      className="flex items-center justify-between gap-4 flex-wrap
-      text-[12px] text-[var(--color-text-muted)] px-1"
-    >
+    <div className="flex items-center gap-4 text-[11px] text-zinc-500">
       {/* Connection status */}
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+      <div className="flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
         <span className="mono">
           {label}
           {error && connectionStatus === "error" && (
-            <span className="text-[var(--color-danger)] ml-2">{error}</span>
+            <span className="text-red-400 ml-1.5">{error}</span>
           )}
         </span>
       </div>
 
-      {/* Readouts */}
-      <div className="flex items-center gap-4">
-        <span className="mono">
-          Frames{" "}
-          <span className="text-[var(--color-text-primary)]">{frameCount}</span>
-        </span>
-
-        {/* Playback FPS slider */}
-        <div className="flex items-center gap-2">
-          <span>Playback</span>
-          <input
-            type="range"
-            min={1}
-            max={30}
-            value={playbackFps}
-            onChange={(e) => onPlaybackFpsChange(Number(e.target.value))}
-            className="w-20"
-          />
-          <span className="mono text-[var(--color-text-primary)] w-5 text-right">
-            {playbackFps}
+      {connectionStatus === "streaming" && (
+        <>
+          <span className="text-zinc-700">|</span>
+          <span className="mono">
+            {frameCount} frames
           </span>
-        </div>
-      </div>
+          <span className="text-zinc-700">|</span>
+          <div className="flex items-center gap-1.5">
+            <span>Playback</span>
+            <input
+              type="range"
+              min={1}
+              max={30}
+              value={playbackFps}
+              onChange={(e) => onPlaybackFpsChange(Number(e.target.value))}
+              className="w-16"
+            />
+            <span className="mono text-zinc-400 w-4 text-right">
+              {playbackFps}
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
