@@ -1,17 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Zap, Square, Camera, Settings2 } from "lucide-react";
+import { Zap, Square, Camera, Settings2, CreditCard } from "lucide-react";
+import { useUser, useClerk, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { useSearchParams } from "next/navigation";
 
 import { VideoCanvas } from "@/components/video-canvas";
 import { PromptBar } from "@/components/prompt-bar";
 import { StyleGallery } from "@/components/style-gallery";
 import { Controls } from "@/components/controls";
 import { StatusBar } from "@/components/status-bar";
+import { PricingModal } from "@/components/pricing-modal";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useWebcam } from "@/hooks/use-webcam";
+import { useUsage } from "@/hooks/use-usage";
 import type { StyleParams } from "@/lib/types";
 import { DEFAULT_PARAMS } from "@/lib/types";
+import { formatTime } from "@/lib/plans";
 
 const CAPTURE_FPS = 15;
 const CAPTURE_WIDTH = 384;
@@ -22,16 +27,40 @@ export default function Home() {
   const [params, setParams] = useState<StyleParams>({ ...DEFAULT_PARAMS });
   const [playbackFps, setPlaybackFps] = useState(15);
   const [showControls, setShowControls] = useState(false);
+  const [showPricing, setShowPricing] = useState(false);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
+
+  // ── Auth ────────────────────────────────────────────────────────
+  const { isSignedIn, isLoaded: isAuthLoaded } = useUser();
+  const clerk = useClerk();
 
   // ── Hooks ──────────────────────────────────────────────────────
   const ws = useWebSocket();
   const webcam = useWebcam();
+  const usage = useUsage();
 
   // Webcam capture interval ref
   const webcamIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isStreaming = ws.status === "streaming";
   const isConnecting = ws.status === "connecting" || ws.status === "ready";
+
+  // ── Checkout return handling ────────────────────────────────────
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const checkoutStatus = searchParams.get("checkout");
+    if (checkoutStatus === "success") {
+      setCheckoutNotice("Subscription activated! You can now start generating.");
+      // Reload user metadata to pick up new plan from webhook
+      usage.reloadUsage();
+      // Clean up URL
+      window.history.replaceState({}, "", window.location.pathname);
+      // Auto-dismiss after 5 seconds
+      setTimeout(() => setCheckoutNotice(null), 5000);
+    } else if (checkoutStatus === "cancel") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchParams, usage]);
 
   // ── Param updater ──────────────────────────────────────────────
   const updateParams = useCallback((partial: Partial<StyleParams>) => {
@@ -42,6 +71,20 @@ export default function Home() {
   const handleStart = useCallback(async () => {
     if (!params.prompt.trim()) return;
 
+    // Gate 1: Must be signed in
+    if (!isSignedIn) {
+      clerk.openSignIn({
+        fallbackRedirectUrl: window.location.href,
+      });
+      return;
+    }
+
+    // Gate 2: Must have remaining usage time
+    if (!usage.hasTimeRemaining) {
+      setShowPricing(true);
+      return;
+    }
+
     // Start webcam first and wait for it to be ready
     if (!webcam.isActive) {
       await webcam.start(CAPTURE_WIDTH, CAPTURE_HEIGHT);
@@ -50,16 +93,33 @@ export default function Home() {
 
     // Connect WebSocket with current params
     ws.connect(params);
-  }, [params, webcam, ws]);
+  }, [params, webcam, ws, isSignedIn, clerk, usage]);
 
   // ── Stop streaming ─────────────────────────────────────────────
-  const handleStop = useCallback(() => {
+  const handleStop = useCallback(async () => {
     ws.disconnect();
     if (webcamIntervalRef.current) {
       clearInterval(webcamIntervalRef.current);
       webcamIntervalRef.current = null;
     }
-  }, [ws]);
+    await usage.stopTimer();
+  }, [ws, usage]);
+
+  // ── Start usage timer when streaming begins ────────────────────
+  useEffect(() => {
+    if (isStreaming) {
+      usage.startTimer();
+    }
+  }, [isStreaming, usage]);
+
+  // ── Mid-stream usage cutoff ────────────────────────────────────
+  useEffect(() => {
+    if (isStreaming && !usage.hasTimeRemaining) {
+      // Time's up — disconnect and show pricing
+      handleStop();
+      setShowPricing(true);
+    }
+  }, [isStreaming, usage.hasTimeRemaining, handleStop]);
 
   // ── Webcam frame capture loop ──────────────────────────────────
   useEffect(() => {
@@ -83,6 +143,17 @@ export default function Home() {
     }
   }, [isStreaming, webcam, ws]);
 
+  // ── Sync usage on tab close ────────────────────────────────────
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isStreaming) {
+        usage.stopTimer();
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isStreaming, usage]);
+
   // ── Style preset selection ─────────────────────────────────────
   const handlePresetSelect = useCallback(
     (prompt: string, loraId: string | null) => {
@@ -103,15 +174,91 @@ export default function Home() {
     [ws, params.lora_id]
   );
 
+  // ── Manage subscription ────────────────────────────────────────
+  const handleManageSubscription = useCallback(async () => {
+    try {
+      const res = await fetch("/api/portal", { method: "POST" });
+      if (res.ok) {
+        const { url } = await res.json();
+        window.location.href = url;
+      }
+    } catch (error) {
+      console.error("Failed to open portal:", error);
+    }
+  }, []);
+
   // ── Helpers ────────────────────────────────────────────────────
   const hasPrompt = params.prompt.trim().length > 0;
+
+  // Usage display
+  const remainingTimeDisplay =
+    isSignedIn && usage.isLoaded
+      ? formatTime(usage.remainingSeconds)
+      : null;
+
+  const usageUrgency: "normal" | "warning" | "critical" =
+    usage.remainingSeconds <= 10
+      ? "critical"
+      : usage.remainingSeconds <= 30
+        ? "warning"
+        : "normal";
 
   // ── Render ─────────────────────────────────────────────────────
   return (
     <main className="h-screen flex flex-col overflow-hidden bg-[var(--color-bg)]">
+      {/* ── Top Bar (auth + branding) ────────────────────────────── */}
+      <div className="shrink-0 flex items-center justify-between px-4 pt-3 pb-1">
+        <div className="text-[11px] text-zinc-500 mono">FLUX.2 Klein</div>
+        <div className="flex items-center gap-2">
+          {/* Manage subscription button (signed in with paid plan) */}
+          <SignedIn>
+            {usage.plan !== "free" && (
+              <button
+                onClick={handleManageSubscription}
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <CreditCard className="w-3 h-3" />
+                Manage
+              </button>
+            )}
+            {/* Upgrade button (free plan) */}
+            {usage.plan === "free" && (
+              <button
+                onClick={() => setShowPricing(true)}
+                className="flex items-center gap-1.5 text-[11px] text-cyan-400 hover:text-cyan-300 transition-colors cursor-pointer"
+              >
+                <Zap className="w-3 h-3" />
+                Upgrade
+              </button>
+            )}
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: "w-7 h-7",
+                },
+              }}
+            />
+          </SignedIn>
+          <SignedOut>
+            <SignInButton mode="modal">
+              <button className="text-[12px] text-zinc-400 hover:text-white transition-colors cursor-pointer px-3 py-1.5 rounded-lg hover:bg-white/5">
+                Sign in
+              </button>
+            </SignInButton>
+          </SignedOut>
+        </div>
+      </div>
+
+      {/* ── Checkout success notice ──────────────────────────────── */}
+      {checkoutNotice && (
+        <div className="mx-4 mb-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-[12px] text-center">
+          {checkoutNotice}
+        </div>
+      )}
+
       {/* ── Video Area (fills available space) ──────────────────── */}
       <div className="flex-1 flex items-center justify-center p-4 pb-0 min-h-0">
-        <div className="flex gap-1 h-full max-h-[calc(100vh-220px)] w-full max-w-5xl">
+        <div className="flex gap-1 h-full max-h-[calc(100vh-260px)] w-full max-w-5xl">
           {/* Webcam input */}
           <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900">
             {webcam.isActive ? (
@@ -182,6 +329,8 @@ export default function Home() {
           playbackFps={playbackFps}
           onPlaybackFpsChange={setPlaybackFps}
           error={ws.error}
+          remainingTimeDisplay={remainingTimeDisplay}
+          usageUrgency={usageUrgency}
         />
       </div>
 
@@ -226,7 +375,7 @@ export default function Home() {
               ) : (
                 <button
                   onClick={handleStart}
-                  disabled={!hasPrompt}
+                  disabled={!hasPrompt || !isAuthLoaded}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
                     cursor-pointer disabled:cursor-not-allowed disabled:opacity-30
                     bg-white text-black hover:bg-zinc-200 transition-all"
@@ -254,6 +403,13 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* ── Pricing Modal ─────────────────────────────────────────── */}
+      <PricingModal
+        isOpen={showPricing}
+        onClose={() => setShowPricing(false)}
+        currentPlan={usage.plan}
+      />
     </main>
   );
 }

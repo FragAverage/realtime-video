@@ -13,6 +13,10 @@ interface StatusBarProps {
   onPlaybackFpsChange: (fps: number) => void;
   /** Error message if any */
   error: string | null;
+  /** Remaining usage time formatted (e.g. "0:45") — shown when user is signed in */
+  remainingTimeDisplay?: string | null;
+  /** Usage urgency level for color coding */
+  usageUrgency?: "normal" | "warning" | "critical";
 }
 
 const STATUS_CONFIG: Record<
@@ -41,6 +45,8 @@ export function StatusBar({
   playbackFps,
   onPlaybackFpsChange,
   error,
+  remainingTimeDisplay,
+  usageUrgency = "normal",
 }: StatusBarProps) {
   const { label, dotClass } = STATUS_CONFIG[connectionStatus];
 
@@ -56,6 +62,24 @@ export function StatusBar({
           )}
         </span>
       </div>
+
+      {/* Usage remaining */}
+      {remainingTimeDisplay != null && (
+        <>
+          <span className="text-zinc-700">|</span>
+          <span
+            className={`mono font-medium ${
+              usageUrgency === "critical"
+                ? "text-red-400"
+                : usageUrgency === "warning"
+                  ? "text-yellow-400"
+                  : "text-zinc-400"
+            }`}
+          >
+            {remainingTimeDisplay} remaining
+          </span>
+        </>
+      )}
 
       {connectionStatus === "streaming" && (
         <>

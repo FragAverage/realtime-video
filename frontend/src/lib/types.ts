@@ -2,6 +2,22 @@
  * Shared TypeScript types for the FLUX.2 Klein real-time stylization app.
  */
 
+import type { PlanId } from "@/lib/plans";
+
+/**
+ * User metadata stored in Clerk publicMetadata.
+ * Readable on both client and server.
+ */
+export interface UserUsageMetadata {
+  plan: PlanId;
+  usageSecondsUsed: number;
+  /** ISO date string — start of current billing period (or account creation for free) */
+  usagePeriodStart: string;
+  chargebeeCustomerId?: string;
+  subscriptionId?: string;
+  subscriptionStatus?: string;
+}
+
 /**
  * Style parameters sent to the backend as JSON when configuring the stream.
  * These control the FLUX.2 Klein pipeline.
