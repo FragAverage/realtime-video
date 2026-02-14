@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Zap, Square, Camera, Settings2, CreditCard } from "lucide-react";
+import { Zap, Square, Camera, Settings2, CreditCard, Circle, Disc } from "lucide-react";
 import { useUser, useClerk, SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
 
@@ -14,6 +14,7 @@ import { PricingModal } from "@/components/pricing-modal";
 import { useWebSocket } from "@/hooks/use-websocket";
 import { useWebcam } from "@/hooks/use-webcam";
 import { useUsage } from "@/hooks/use-usage";
+import { useRecorder } from "@/hooks/use-recorder";
 import type { StyleParams } from "@/lib/types";
 import { DEFAULT_PARAMS } from "@/lib/types";
 import { formatTime } from "@/lib/plans";
@@ -44,6 +45,28 @@ export default function Home() {
 
   const isStreaming = ws.status === "streaming";
   const isConnecting = ws.status === "connecting" || ws.status === "ready";
+
+  // ── Recording ──────────────────────────────────────────────────
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { isRecording, startRecording, stopRecording, takeSnapshot } = useRecorder(canvasRef);
+
+  // Auto-record when streaming starts
+  useEffect(() => {
+    if (isStreaming && !isRecording) {
+      // Short delay to ensure first frames are ready
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, isRecording, startRecording]);
+
+  // Stop recording when streaming stops
+  useEffect(() => {
+    if (!isStreaming && isRecording) {
+      stopRecording();
+    }
+  }, [isStreaming, isRecording, stopRecording]);
 
   // ── Checkout return handling ────────────────────────────────────
   const searchParams = useSearchParams();
@@ -303,6 +326,7 @@ export default function Home() {
           <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900 aspect-[4/3]">
             <div className="w-full h-full">
               <VideoCanvas
+                ref={canvasRef}
                 frameBuffer={ws.frameBuffer}
                 playbackFps={playbackFps}
                 isPlaying={isStreaming}
@@ -351,15 +375,41 @@ export default function Home() {
               {/* Settings toggle */}
               <button
                 onClick={() => setShowControls(!showControls)}
-                className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                  showControls
+                className={`p-2 rounded-lg transition-colors cursor-pointer ${showControls
                     ? "bg-white/10 text-white"
                     : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-                }`}
+                  }`}
                 title="Parameters"
               >
                 <Settings2 className="w-4 h-4" />
               </button>
+
+              <div className="w-px h-5 bg-white/10" />
+
+              {/* Snapshot */}
+              <button
+                onClick={takeSnapshot}
+                disabled={!isStreaming}
+                className="p-2 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="Take Snapshot"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+
+              {/* Record (Manual toggle if needed, but mostly auto) */}
+              <button
+                onClick={isRecording ? stopRecording : startRecording}
+                disabled={!isStreaming}
+                className={`p-2 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${isRecording
+                    ? "text-red-500 hover:text-red-400 bg-red-500/10"
+                    : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                  }`}
+                title={isRecording ? "Stop Recording" : "Start Recording"}
+              >
+                {isRecording ? <Disc className="w-4 h-4 animate-pulse" /> : <Circle className="w-4 h-4" />}
+              </button>
+
+              <div className="w-px h-5 bg-white/10" />
 
               {/* Start / Stop button */}
               {isStreaming || isConnecting ? (

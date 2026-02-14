@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+/**
+ * High-performance canvas renderer for streaming video frames.
+ * Clean design without scanlines or overlays.
+ */
+import { useCallback, useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 
 interface VideoCanvasProps {
   /** Ref to the shared frame buffer (array of JPEG Blobs) */
@@ -19,16 +23,19 @@ interface VideoCanvasProps {
  * High-performance canvas renderer for streaming video frames.
  * Clean design without scanlines or overlays.
  */
-export function VideoCanvas({
+export const VideoCanvas = forwardRef<HTMLCanvasElement, VideoCanvasProps>(({
   frameBuffer,
   playbackFps,
   isPlaying,
   width = 512,
   height = 512,
-}: VideoCanvasProps) {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentFps, setCurrentFps] = useState(0);
   const [bufferSize, setBufferSize] = useState(0);
+
+  // Expose internal ref to parent
+  useImperativeHandle(ref, () => canvasRef.current!, []);
 
   // FPS tracking refs
   const fpsFrameCount = useRef(0);
@@ -130,4 +137,5 @@ export function VideoCanvas({
       )}
     </div>
   );
-}
+});
+VideoCanvas.displayName = "VideoCanvas";
