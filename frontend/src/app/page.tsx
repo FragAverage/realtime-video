@@ -126,11 +126,10 @@ export default function Home() {
     if (isStreaming && webcam.isActive) {
       const interval = 1000 / CAPTURE_FPS;
 
-      webcamIntervalRef.current = setInterval(() => {
-        const frame = webcam.captureFrame(CAPTURE_WIDTH, CAPTURE_HEIGHT);
-        if (frame) {
-          const binary = Uint8Array.from(atob(frame), (c) => c.charCodeAt(0));
-          ws.sendFrame(binary.buffer);
+      webcamIntervalRef.current = setInterval(async () => {
+        const blob = await webcam.captureFrame(CAPTURE_WIDTH, CAPTURE_HEIGHT);
+        if (blob) {
+          ws.sendFrame(blob);
         }
       }, interval);
 
