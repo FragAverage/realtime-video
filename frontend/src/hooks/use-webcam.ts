@@ -65,7 +65,7 @@ export function useWebcam(): UseWebcamReturn {
   }, []);
 
   const start = useCallback(
-    async (targetWidth = 832, targetHeight = 480) => {
+    async (targetWidth = 512, targetHeight = 512) => {
       // Stop existing stream
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());

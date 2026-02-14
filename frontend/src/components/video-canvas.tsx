@@ -23,8 +23,8 @@ export function VideoCanvas({
   frameBuffer,
   playbackFps,
   isPlaying,
-  width = 832,
-  height = 480,
+  width = 512,
+  height = 512,
 }: VideoCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentFps, setCurrentFps] = useState(0);

@@ -29,8 +29,6 @@ export interface StyleParams {
   guidance_scale: number;
   strength: number;
   num_inference_steps: number;
-  /** Active LoRA adapter id, or null for base model (prompt-only) */
-  lora_id: string | null;
 }
 
 /**
@@ -50,8 +48,6 @@ export interface StylePreset {
   label: string;
   prompt: string;
   color: string; // Tailwind color class for the button accent
-  /** LoRA adapter id to load when this preset is selected, or null for prompt-only */
-  lora_id: string | null;
 }
 
 /**
@@ -64,5 +60,4 @@ export const DEFAULT_PARAMS: StyleParams = {
   guidance_scale: 1.0,
   strength: 0.4,
   num_inference_steps: 4,
-  lora_id: null,
 };

@@ -19,8 +19,8 @@ import { DEFAULT_PARAMS } from "@/lib/types";
 import { formatTime } from "@/lib/plans";
 
 const CAPTURE_FPS = 15;
-const CAPTURE_WIDTH = 384;
-const CAPTURE_HEIGHT = 384;
+const CAPTURE_WIDTH = 512;
+const CAPTURE_HEIGHT = 512;
 
 export default function Home() {
   // ── State ──────────────────────────────────────────────────────
@@ -156,11 +156,11 @@ export default function Home() {
 
   // ── Style preset selection ─────────────────────────────────────
   const handlePresetSelect = useCallback(
-    (prompt: string, loraId: string | null) => {
-      updateParams({ prompt, lora_id: loraId });
+    (prompt: string) => {
+      updateParams({ prompt });
 
       if (isStreaming) {
-        ws.sendConfig({ prompt, lora_id: loraId });
+        ws.sendConfig({ prompt });
       }
     },
     [isStreaming, ws, updateParams]
@@ -169,9 +169,9 @@ export default function Home() {
   // ── Mid-stream prompt apply ────────────────────────────────────
   const handlePromptApply = useCallback(
     (prompt: string) => {
-      ws.sendConfig({ prompt, lora_id: params.lora_id });
+      ws.sendConfig({ prompt });
     },
-    [ws, params.lora_id]
+    [ws]
   );
 
   // ── Manage subscription ────────────────────────────────────────
@@ -258,9 +258,9 @@ export default function Home() {
 
       {/* ── Video Area (fills available space) ──────────────────── */}
       <div className="flex-1 flex items-center justify-center p-4 pb-0 min-h-0">
-        <div className="flex gap-1 h-full max-h-[calc(100vh-260px)] w-full max-w-5xl">
+        <div className="flex gap-1 h-full max-h-[calc(100vh-260px)] w-full max-w-7xl">
           {/* Webcam input */}
-          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900">
+          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900 aspect-[4/3]">
             {webcam.isActive ? (
               <video
                 ref={webcam.videoRef}
@@ -301,7 +301,7 @@ export default function Home() {
           </div>
 
           {/* Styled output */}
-          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900">
+          <div className="flex-1 relative rounded-2xl overflow-hidden bg-zinc-900 aspect-[4/3]">
             <div className="w-full h-full">
               <VideoCanvas
                 frameBuffer={ws.frameBuffer}
