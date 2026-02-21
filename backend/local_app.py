@@ -40,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 # Config
 # ---------------------------------------------------------------------------
 
-MODEL_REPO = "black-forest-labs/FLUX.2-klein-4b-fp8"
+MODEL_REPO = "black-forest-labs/FLUX.2-klein-4B"
 USE_TORCH_COMPILE = os.environ.get("USE_TORCH_COMPILE", "0") == "1"
 
 # LoRA adapters — loaded directly from HF Hub by repo ID
