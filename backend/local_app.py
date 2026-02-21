@@ -40,56 +40,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 # Config
 # ---------------------------------------------------------------------------
 
-MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(os.path.dirname(__file__), "models"))
-LORAS_DIR = os.path.join(MODELS_DIR, "loras")
 MODEL_REPO = "black-forest-labs/FLUX.2-klein-4b-fp8"
 USE_TORCH_COMPILE = os.environ.get("USE_TORCH_COMPILE", "0") == "1"
 
+# LoRA adapters — loaded directly from HF Hub by repo ID
 LORA_REPOS = {
     "anime-style": "Sawata97/flux2_4b_koni_animestyle",
     "pixel-art": "Limbicnation/pixel-art-lora",
 }
-
-# ---------------------------------------------------------------------------
-# Weight download
-# ---------------------------------------------------------------------------
-
-def download_weights():
-    """Download FLUX.2 Klein 4B weights and LoRA adapters if not already cached."""
-    from huggingface_hub import snapshot_download
-
-    os.makedirs(MODELS_DIR, exist_ok=True)
-
-    # Base model
-    model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b-fp8")
-    marker = os.path.join(model_dir, "model_index.json")
-    if not os.path.exists(marker):
-        log.info(f"Downloading {MODEL_REPO} → {model_dir} (this will take a while)...")
-        snapshot_download(
-            MODEL_REPO,
-            local_dir=model_dir,
-            local_dir_use_symlinks=False,
-            ignore_patterns=["*.bin", "*.onnx*", "*.xml", "*.md", ".gitattributes"],
-        )
-        log.info("FLUX.2 Klein 4B downloaded.")
-    else:
-        log.info("FLUX.2 Klein 4B already cached.")
-
-    # LoRA adapters
-    os.makedirs(LORAS_DIR, exist_ok=True)
-    for lora_id, repo in LORA_REPOS.items():
-        lora_dir = os.path.join(LORAS_DIR, lora_id)
-        if not os.path.exists(lora_dir) or not os.listdir(lora_dir):
-            log.info(f"Downloading LoRA '{lora_id}' from {repo}...")
-            snapshot_download(
-                repo,
-                local_dir=lora_dir,
-                local_dir_use_symlinks=False,
-                ignore_patterns=["*.md", ".gitattributes"],
-            )
-            log.info(f"LoRA '{lora_id}' downloaded.")
-        else:
-            log.info(f"LoRA '{lora_id}' already cached.")
 
 
 # ---------------------------------------------------------------------------
@@ -109,9 +67,8 @@ class FluxServer:
         self.available_loras = {}
 
     def startup(self):
-        """Download weights and initialise the pipeline. Called once at server start."""
+        """Initialise the pipeline. Called once at server start. HF Hub handles caching."""
         import torch
-        download_weights()
         log.info("Initialising FLUX.2 Klein pipeline...")
         self._init_pipeline()
         log.info(f"Pipeline ready. GPU: {torch.cuda.get_device_name()}")
@@ -121,21 +78,17 @@ class FluxServer:
         import torch
         from diffusers import Flux2KleinPipeline
 
-        model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b-fp8")
-
+        # Load directly from HF Hub — downloads on first run, uses cache thereafter
         pipe = Flux2KleinPipeline.from_pretrained(
-            model_dir,
+            MODEL_REPO,
             torch_dtype=torch.bfloat16,
         )
         pipe = pipe.to("cuda")
 
         self.pipe = pipe
 
-        # Discover available LoRAs
-        for lora_id in LORA_REPOS:
-            lora_dir = os.path.join(LORAS_DIR, lora_id)
-            if os.path.exists(lora_dir):
-                self.available_loras[lora_id] = lora_dir
+        # LoRAs are loaded from HF Hub by repo ID when requested
+        self.available_loras = dict(LORA_REPOS)
         log.info(f"Available LoRAs: {list(self.available_loras.keys())}")
 
         # Pre-encode default prompt
@@ -193,9 +146,9 @@ class FluxServer:
             if lora_id not in self.available_loras:
                 log.warning(f"LoRA '{lora_id}' not found, ignoring.")
                 return
-            lora_dir = self.available_loras[lora_id]
-            log.info(f"Loading LoRA '{lora_id}' from {lora_dir}...")
-            self.pipe.load_lora_weights(lora_dir)
+            repo = self.available_loras[lora_id]
+            log.info(f"Loading LoRA '{lora_id}' from {repo}...")
+            self.pipe.load_lora_weights(repo)
             self.pipe.fuse_lora()
             self.current_lora = lora_id
             log.info(f"LoRA '{lora_id}' loaded and fused.")
