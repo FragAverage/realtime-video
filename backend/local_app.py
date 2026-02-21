@@ -42,7 +42,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(os.path.dirname(__file__), "models"))
 LORAS_DIR = os.path.join(MODELS_DIR, "loras")
-MODEL_REPO = "black-forest-labs/FLUX.2-klein-4B"
+MODEL_REPO = "black-forest-labs/FLUX.2-klein-4b-fp8"
 USE_TORCH_COMPILE = os.environ.get("USE_TORCH_COMPILE", "0") == "1"
 
 LORA_REPOS = {
@@ -61,7 +61,7 @@ def download_weights():
     os.makedirs(MODELS_DIR, exist_ok=True)
 
     # Base model
-    model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b")
+    model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b-fp8")
     marker = os.path.join(model_dir, "model_index.json")
     if not os.path.exists(marker):
         log.info(f"Downloading {MODEL_REPO} → {model_dir} (this will take a while)...")
@@ -121,7 +121,7 @@ class FluxServer:
         import torch
         from diffusers import Flux2KleinPipeline
 
-        model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b")
+        model_dir = os.path.join(MODELS_DIR, "flux2-klein-4b-fp8")
 
         pipe = Flux2KleinPipeline.from_pretrained(
             model_dir,
@@ -281,7 +281,7 @@ async def health():
         "status": "ok",
         "gpu": torch.cuda.get_device_name(),
         "vram_used_gb": round(mem, 2),
-        "model": "flux2-klein-4b-distilled",
+        "model": "flux2-klein-4b-fp8",
         "lora": server.current_lora,
         "torch_compile": USE_TORCH_COMPILE,
     }
