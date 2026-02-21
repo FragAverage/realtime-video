@@ -1,0 +1,35 @@
+# FLUX.2 Klein - Local backend dependencies
+# ==========================================
+# PyTorch must be installed FIRST using the official command below,
+# since the CUDA version must match your driver.
+#
+# For RTX 5090 (Blackwell) — use the latest stable or nightly build:
+#
+#   Latest stable (recommended first):
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+#
+#   If the 5090 isn't recognised, fall back to nightly:
+#   pip install --pre torch torchvision --index-url https://download.pytorch.org/whl/nightly/cu128
+#
+# Then install the rest:
+#   pip install -r backend/requirements-local.txt
+
+# Diffusers from git main — Flux2KleinPipeline is not in any stable release yet
+diffusers @ git+https://github.com/huggingface/diffusers.git
+
+transformers>=4.51.0
+accelerate>=0.33.0
+peft>=0.15.0
+safetensors>=0.4.0
+sentencepiece>=0.1.91
+optimum-quanto>=0.2.6
+
+pillow>=10.0.0
+numpy<2
+
+fastapi>=0.112.0
+uvicorn>=0.30.0
+python-multipart>=0.0.9
+pydantic>=2.8.0
+
+huggingface-hub>=0.34.0
